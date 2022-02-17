@@ -1,0 +1,309 @@
+---
+title: "HW02_rishabk2"
+author: "Rishab Kulkarni"
+date: "1/25/2022"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 1a.
+```{r}
+
+df <- read.csv("Downloads/realestate.csv",row.names = 1)
+
+a <- df
+
+a$season <- as.factor(ifelse(a$date%%1 >= 0.500 & a$date%%1 <= 0.667,'summer',
+                             ifelse(a$date%%1 >= 0.750 & a$date%%1 <= 0.917,'fall',
+                             ifelse(a$date%%1 >= 0.000 & a$date%%1<= 0.167,'winter',
+                             ifelse(a$date%%1 >= 0.250 & a$date%%1 <= 0.417,'spring',0)))))
+
+table(a$date, a$season)
+
+```
+# 1b.
+```{r}
+
+s <- floor(0.7585*nrow(a))
+
+set.seed(678461346)
+
+ind <- sample(seq_len(nrow(a)),size= s)
+
+# train/test split
+
+train <- a[ind,]
+test <- a[-ind,]
+
+
+# mean price of testing data
+mean(test$price)
+
+# mean price of training data
+mean(train$price)
+
+```
+
+The mean price of my testing data was 37.273, and the mean price of my
+training data was 38.20541
+
+# 1c.
+```{r}
+library(Metrics)
+
+m <- lm(price ~season+age+distance+stores,train)
+
+yhat <- predict(m, test)
+
+# testing error
+mse(yhat, test$price)
+
+# training error
+mean(m$residuals^2)
+
+```
+
+Training error was 87.89075, and testing error was 65.96945. The training
+error is higher than the testing error, which is unexpected. We would expect
+the testing error to be higher because the testing data is unseen data to
+the model. The reason for this anomaly could be the presence of outliers 
+in the training data.
+
+# 1d.
+
+```{r}
+
+# creating three dummy variables
+# ref. category as spring
+
+a$summer <- ifelse(a$season == 'summer',1,0)
+a$fall <- ifelse(a$season == 'fall',1,0)
+a$winter <- ifelse(a$season == 'winter',1,0)
+
+# remove factor variable season
+# new design matrix X
+
+X <- a[, -8]
+
+y <- a$price
+
+train_X <- X[ind,]
+test_X <- X[-ind,]
+
+m_X <- lm(price ~age + distance + stores + summer + fall + winter,train_X )
+
+# training error
+mean(m_X$residuals ^ 2)
+```
+
+Training error was 88.10575, which was nearly the same as the training 
+error in the previous question. Under a different seed, the error can
+come out to 87.89075, which is the same the error in the previous question.
+
+# 1e.
+```{r}
+
+intercept <- 1
+
+X <- cbind(intercept, X)
+
+# Define X with intercept column
+# take out price y
+
+X_mat <- X[,-8]
+
+X_mat <- as.matrix(X_mat)
+
+b_hat <- solve(t(X_mat) %*% X_mat) %*% t(X_mat) %*% y
+
+b_hat
+
+# using b_hat coefficients for predictions
+
+ypred <- train_X$date*4.743984e+00 + train_X$age*-2.762434e-01 + 
+  train_X$distance*-4.561027e-03 + train_X$stores*1.120903e+00 +
+  train_X$latitude*2.304218e+02 + train_X$longitude*-1.372222e+01 +
+  train_X$summer*2.435298e+00 + train_X$fall*1.895742e-01 +
+  train_X$winter*1.479366e+00 - 1.359381e+04
+
+
+mean((train_X$price-ypred) ^ 2)
+```
+
+The training error associated with the $\hat{\beta}$ coefficients is
+79.78973, which is near the training error in part 1d.
+
+# 2a.
+```{r}
+
+b <- df
+
+s <- floor(0.7585*nrow(b))
+
+set.seed(678461346)
+
+ind <- sample(seq_len(nrow(b)),size= s)
+
+# train/test split
+
+train_b <- b[ind,]
+test_b <- b[-ind,]
+
+# full model
+b_m <- lm(price ~ ., b)
+
+Cp <- sum(b_m$residuals ^ 2)+ 2*6*summary(b_m)$sigma^ 2
+Cp
+
+# subset model
+b_m_sub <- lm(price ~ age+distance+stores, b)
+
+Cp_sub <- sum(b_m_sub$residuals ^ 2)+ 2*3*summary(b_m_sub)$sigmaS^ 2
+Cp_sub
+
+# full model testing error
+mse(predict(b_m, test_b),test_b$price)
+
+# subset model testing error
+mse(predict(b_m_sub,test_b),test_b$price)
+```
+
+The Marrows' Cp criterion was 32874.03 for the full model, and 35604.46
+for the model that contains only age, distance, and stores. A lower Cp
+implies a better fit; therefore, based on this criteria, the full model
+is better.
+
+The testing error was 64.10739 for the full model, and 66.2375 for
+the subset model with only age, distance, and stores. This implies that
+the full model is better from its lower testing error. This matched my 
+expectations, as it confirms the previous deduction that the full 
+model was better.
+
+The Marrows' Cp criterion was lower in the full model than in the subset
+model, meaning it was the better fit. Thus, I expected the full model's
+prediction or testing error to be lower, which would've meant that the 
+full model remains the better fit. Also, as we saw from last week's 
+lecture, the simulation study revealed that in some cases, the presence
+of more variables can bring down the prediction error. This may be a 
+reason as to why the full model's testing error was lower than that of
+the subset model's.
+
+Additional criterion such as AIC and BIC can provide more insight
+on which of the two models is truly the better fit of the data.
+
+# 2b.
+
+```{r}
+
+# defining design matrix X and outcome y
+
+des_X <- b[,-7]
+
+outcome_y <- b[,7]
+
+library(leaps)
+
+leaps <- regsubsets(x = as.matrix(des_X), y = outcome_y)
+
+sumleaps <- summary(leaps)
+
+one_var <- lm(price ~ distance, b)
+two_var <- lm(price ~ distance + stores, b)
+
+four_var <- lm(price ~ age + distance + stores + latitude, b)
+five_var <- lm(price ~ date + age + distance + stores + latitude, b)
+
+AIC(one_var)
+
+AIC(two_var)
+
+AIC(b_m_sub)
+
+AIC(four_var)
+
+AIC(five_var)
+
+AIC(b_m)
+
+```
+
+The model with the lowest AIC criterion, 2987.991, was the five variable 
+model from the best subset regression summary. This model contained date,
+age, distance, stores, and latitude. The variable longitude was removed
+from the model.
+
+
+```{r}
+n <- 414
+
+modelsize <- apply(sumleaps$which, 1, sum)
+
+AIC <- n*log(sumleaps$rss/n) + 2*modelsize
+
+inrange <- function(x) {(x -min(x))/(max(x)-min(x))}
+
+AIC <- inrange(AIC)
+
+plot(range(modelsize), c(0, 0.5), type="n", 
+         xlab="Model Size with Intercept", 
+         ylab="AIC Criterion", cex.lab = 1.5)
+
+points(modelsize, AIC, col = "orange", type = "b", pch = 19)
+```
+
+The plot confirms our claim that the five-variable model from the best 
+subsets regression summary is indeed, the best model. As shown in the plot,
+the model size of 6, which is 5 variables plus the intercept, has the
+lowest AIC criterion. This implies that the model with 5 variables is
+the best model compared to the other model sizes.
+
+
+```{r}
+
+# prediction error of best model
+
+mse(predict(five_var, test_b), test_b$price)
+```
+
+The best model's prediction error on the testing data was 64.07739
+
+```{r}
+
+# step-wise regression with BIC
+
+step(b_m, direction = "both", k= log(n))
+```
+
+The initial model used in the step-wise regression w/ BIC was the 
+full model with all 6 variables. 
+
+The upper limit of the model is the full model.
+
+The step-wise regression did "both", and the result was the same as
+the one in part 2b. 
+
+Both the best subset selection w/ AIC and the step-wise regression 
+w/ BIC chose a five-variable model with date, age, distance, stores,
+and latitude as predictors. 
+
+The best subset selection w/ AIC is an exhaustive search algorithm 
+that checks all combinations of predictors and chooses the model
+with the lowest AIC score for each model size. Likewise, in this
+problem, the best subset selection chose the best model with sizes
+1 to 6. Of these six models, the one with size 5 had the lowest
+AIC score. The summary of the best subset regression showed us 
+what these 5 predictors were.
+
+The step-wise regression w/ BIC works differently. With step-wise
+regression, you can start with either an intercept model or full
+model. In this problem we started with the full model, so the 
+step-wise regression removes one variable at a time, while 
+checking if the BIC score goes down. In this case, removing the
+longitude predictor lowered the BIC score the most and we were
+left with the five-variable model as the best model once again. 
+

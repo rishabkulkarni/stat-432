@@ -1,0 +1,186 @@
+---
+title: "HW04_rishabk2"
+author: "Rishab Kulkarni"
+date: "2/14/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+**Question 1: The Bias-Variance Trade-Off Simulation**
+
+```{r}
+library(MASS)
+
+set.seed(678461346)
+n=30
+
+vals = c()
+
+for(i in 1:1000) {
+  
+  X = mvrnorm(n, c(0, 0), matrix(c(1, 0.9, 0.9, 1), 2,2))
+  y = rnorm(n, mean = X[,1] + X[,2])
+  
+  b <- solve(t(X) %*% X + diag(2)) %*% t(X) %*% y
+  vals[i] <- b[2]
+}
+
+# variance
+var(vals)
+
+# bias squared
+(mean(vals) - 1) ^ 2
+```
+
+The variance and bias^2 of the 1000 $\hat{\beta_1}$ values are 0.1010457
+and 0.0002670523, respectively.
+
+```{r}
+p <- seq(0, 0.5, by = 0.5/99)
+
+a=1
+vars <- c()
+bias.sq <- c()
+
+for(l in p) {
+  for(i in 1:1000) {
+    X = mvrnorm(n, c(0, 0), matrix(c(1,0.9,0.9, 1), 2,2))
+    y = rnorm(n, mean = X[,1] + X[,2])
+    
+    b <- solve(t(X) %*% X + l*n*diag(2)) %*% t(X) %*% y
+    vals[i] <- b[2]
+  }
+  vars[a] <- var(vals)
+  bias.sq[a] <- (mean(vals) - 1) ^ 2
+  a = a+1
+}
+
+bias.sq_var <- bias.sq + vars
+```
+
+```{r}
+plot(p, vars, type = "l", col = "red",
+     lty = 1, xlab = "lambda", ylab = "quantity")
+lines(p, bias.sq, type = "l", col = "blue",
+      lty = 1, xlab = "lambda", ylab = "quantity")
+lines(p, bias.sq_var, type = "l", col = "black",
+      lty = 1, xlab = "lambda", ylab = "quantity")
+legend("topright", legend=c("Bias^2", "Variance", "Bias^2 + Variance"),
+       col=c("blue", "red", "black"), lty = 1:2, cex=0.8)
+```
+
+As lambda increases, the bias^2 term increases and the variance term
+decreases. Their sum sharply decreases initially, but levels off and
+increases with the bias^2 term. We can note that the sum curve was mostly 
+the same as the variance curve at first, considering that the bias was
+nearly zero. As the larger penalty caused more bias, the bias^2 + var
+term naturally began to increase.
+
+With no ridge penalty where $\lambda=0$, the ridge regression becomes
+another ordinary least-squares without bias. However, as we add the ridge
+penalty where $\lambda$ has a value, we introduce bias to the $\hat{\beta_1}$
+estimates; this is why the bias^2 trend increases with $\lambda$. As
+the penalty causes more and more bias, the variance of the $\hat{\beta_1}$
+decreases as per the bias-variance trade-off, which is why the variance
+trend decreases as the bias^2 trend increases.
+
+The ridge regression penalty causes these trends. When we add the penalty
+to the objective function, we introduce bias to the $\hat{\beta_1}$
+estimates. A larger penalty or $\lambda$ increases the bias, which in
+turn decreases the variance of the $\hat{\beta_1}$ estimates. This is 
+the bias-variance trade-off.
+
+I think the optimal $\lambda$ value is not the one with the lowest 
+variance, as the estimates will suffer from large bias. The optimal $\lambda$ 
+value is what achieves a good balance of the bias-variance trade-off.
+Thus, I think the best $\lambda$ value lies at the intersection of the
+bias^2 and variance trend, which is ~0.28
+
+**Question 2: The Cross Validation**
+
+```{r}
+library(MASS)
+data("mtcars")
+
+r <- lm.ridge(mpg ~., mtcars, lambda = seq(0, 100, 1))
+plot(r$lambda[1:100], r$GCV[1:100], type = "l", col = "red", 
+         ylab = "GCV", xlab = "Lambda", lwd = 2)
+    title("mtcars Data: GCV")
+    
+r$lambda[which.min(r$GCV)]
+```
+
+```{r}
+# k-fold CV code
+
+library(caret)
+
+folds <- createFolds(mtcars$mpg, k=5, list = TRUE, returnTrain = FALSE)
+cv.error <- c()
+
+for(k in 1:5) {
+  
+  ind <- unlist(folds[k])
+  
+  train <- mtcars[-ind, ]
+  test <- mtcars[ind, ]
+  
+  fit <- lm.ridge(mpg ~., train, lambda = 15)
+  
+  y.pred <- as.matrix(cbind(1,test[, -1])) %*% coef(fit)
+  
+  cv.error[k] <- mean((test$mpg - y.pred)^2)
+  
+}
+mean(cv.error)
+
+```
+
+The cross-validation error was 6.652294
+
+```{r}
+library(glmnet)
+
+cv <- cv.glmnet(x = data.matrix(mtcars[, -1]),
+                y = mtcars$mpg, nfolds = 5, alpha = 0)
+
+plot(cv$glmnet.fit, "lambda")
+
+plot(cv)
+
+# train/test split for cv errors
+
+s <- floor(0.78125 * nrow(mtcars))
+
+id <- sample(seq_len(nrow(mtcars)), size = s)
+
+train.cv <- mtcars[id, ]
+test.cv <- mtcars[-id, ]
+
+
+pred.min <- predict(cv, newx = data.matrix(test.cv[, -1]),
+                    s = "lambda.min")
+# lambda.min error
+mean((test$mpg - pred.min)^2)
+
+
+pred.1se <- predict(cv, newx = data.matrix(test.cv[, -1]),
+                    s = "lambda.1se")
+# lambda.1se error
+mean((test$mpg - pred.1se)^2)
+```
+
+My k-fold cross-validation should be stable, because testing errors with five
+or ten folds aren't usually afflicted with high bias and variance. The use
+of more folds reduces bias of the estimates, increasing variance. A high 
+variance won't yield a stable prediction error. However, using five or ten
+folds achieves a good balance of the bias-variance trade-off, giving us
+stable testing errors.
+
+In my implementation, we split the data into k = 5 folds. For each k in
+1,2,...5 folds, the kth fold was the test data and the other four folds
+were the training data. In each iteration, both the testing and training
+data changed, so there is ample randomness. 

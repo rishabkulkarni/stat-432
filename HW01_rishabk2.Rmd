@@ -1,0 +1,146 @@
+---
+title: "HW01_rishabk2"
+author: "Rishab Kulkarni"
+date: "1/18/2022"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 1a.
+```{r}
+set.seed(678461346)
+
+x <- rnorm(100, mean = 3, sd = 2)
+x[1:10]
+```
+
+Set seed with my UIN as the seed; Then, I used the rnorm() function with mean=3
+and sd=2 as parameters to produce 100 values. Stored these values in a vector x,
+and printed out the first 10 values.
+
+# 1b.
+
+The formula for sample mean is:
+
+$\frac{1}{n}\ \sum_{i=1}^{n} x_i$
+
+The formula for sample variance is:
+
+$\frac{1}{n-1}\ \sum_{i=1}^{n} (x_i-\bar{x})^2$
+
+# 1c.
+```{r}
+mysummarystat <- function(x){
+ x_b <- sum(x) / length(x)
+ x_v <- sum((x - x_b)^2) / (length(x)-1)
+ 
+ return(c(x_b, x_v))
+}
+mysummarystat(x)
+```
+
+Found the sample mean by dividing the sum of the values by 100, or number of
+values. Found the sample variance by dividing the rss by number of values-1.
+The function returns a vector containing these two values.
+
+```{r}
+mean(x)
+```
+
+```{r}
+var(x)
+```
+
+The R functions mean() and var() output nearly the same values computed by
+the function.
+
+# 2a.
+```{r}
+data("iris")
+
+# changing class labels
+levels(iris$Species) <- c('Species_1', 'Species_2', 'Species_3')
+
+# showing new class labels
+iris$Species
+```
+
+# 2b.
+```{r}
+table(iris$Species)/nrow(iris)
+```
+
+The frequencies for each species are the same: 1/3
+
+# 2c.
+```{r}
+cont <- iris[, -5]
+
+cor(cont)
+```
+
+cont includes only continuous variables, excluding Species. Used the cor() 
+function with cont as the parameter to produce the correlation matrix.
+
+Petal.Width and Petal.Length have the highest correlation of ~0.963.
+
+# 2d.
+```{r}
+e <- eigen(cor(cont))
+e
+```
+
+Used the eigen() function to compute eigenvalues and eigenvectors of the
+correlation matrix found in part 2c. 
+
+The largest eigenvalue is 2.91849782, and the corresponding eigenvector is
+(0.5210659, -0.2693474, 0.5804131, 0.5648565).
+
+# 3a.
+```{r}
+boxplot(cont)
+points(colMeans(cont),pch = 19,
+       cex = 1.5, col = "red")
+```
+
+# 3b.
+```{r}
+boxplot(cont)
+points(colMeans(cont),pch = 19,
+       cex = 1.5, col = "red")
+
+# box-plot adjustments
+fig.align = 'center'
+out.width = "75%"
+```
+
+Centered box plot with page width of 75%.
+
+# 4a.
+```{r}
+install.packages("devtools",repos = "http://cran.us.r-project.org")
+
+library(devtools)
+install_version("ElemStatLearn", version = "2015.6.26.2", 
+                  repos = "http://cran.us.r-project.org")
+
+library(ElemStatLearn)
+data("ozone")
+
+# saving ozone data into a .csv file
+write.csv(ozone, 'ozone.csv')
+
+# read data from .csv file back into R
+ozone_csv <- read.csv(file = 'ozone.csv',row.names = 1)
+
+head(ozone_csv)
+```
+
+First column of ozone_csv was simply an indexing column, but the original ozone
+data didn't have this. Thus, it was excluded when printing out the first 5 
+observations via row.names = 1.

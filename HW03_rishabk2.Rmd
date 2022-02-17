@@ -1,0 +1,155 @@
+---
+title: "HW03_rishabk2"
+author: "Rishab Kulkarni"
+date: "2/6/2022"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+**Homework 3 - Numerical Optimization**
+
+**Question 1 - Optimizing Univariate Function**
+
+**1a.**
+
+```{r}
+fx1 <- function(x) exp(x) - 2.5*(x+6)^2 - 0.05*x^3
+
+plot(fx1, xlim = c(-40, 7))
+```
+
+```{r}
+optim(par = -15, fn = fx1, method = "BFGS")
+```
+
+```{r}
+optim(par = 0, fn = fx1, method = "BFGS")
+```
+
+**1b.**
+
+The solutions I obtained were different due to the varying initial points.
+With an initial point of 0, the algorithm finds a local min from 0
+onward which is 3.95. The plot confirms that there's indeed, a local min 
+near this value.
+
+Likewise, with an initial point of -15, the algorithm finds a local min 
+from -15 onward which is -25.49. The plot confirms that there is another 
+local min near this value.
+
+The derivative of the function is:
+$f'(x) = e^{x} - 0.15x^2 - 5x - 30$
+
+**1c.**
+
+```{r}
+d <- function(x) exp(x) - 0.15*x^2 - 5*x - 30
+
+d(-25.48584)
+
+d(3.953841)
+```
+
+The derivative function's value at both solutions is 0. This confirms that
+these values are the solutions to the optimization problem.
+
+**Question 2 - The Pseudo-Huber Loss**
+
+**2a.**
+
+```{r}
+set.seed(200)
+
+n = 150
+X <- cbind(1, matrix(rnorm(n*5), nrow = n))
+y <- X %*% c(1,1,0.5,0,0,0) + rt(n, 2)
+
+pseudo_Huber <- function(a, delta = 1) delta^2 * {sqrt(1 + (a/delta)^2) - 1}
+
+Huber <- function(a, delta = 1) ifelse(abs(a) <= delta, 0.5*a^2, delta*(abs(a) - 0.5*delta))
+
+x = seq(-4, 4, 0.001)
+
+plot(x, Huber(x), type = "l",
+       xlab = "a", ylab = "Huber Loss",
+       col = "darkorange", ylim = c(0, 8))
+
+plot(x, pseudo_Huber(x), type = "l",
+       xlab = "a", ylab = "Pseudo-Huber Loss",
+       col = "darkorange", ylim = c(0, 8))
+```
+
+**2b.**
+
+```{r}
+Huber_f <- function(b, trainx, trainy) mean(pseudo_Huber(trainy - trainx %*% b, delta = 1))
+optim(par = c(2,2,2,2,2,2), fn = Huber_f, method = "BFGS", trainx = X, trainy = y)
+
+lm(y ~ X - 1)
+```
+
+**2c.**
+
+The parameters from the pseudo-Huber regression are different than the 
+parameters from the lm() fit, because the pseudo-Huber loss function 
+removed outliers from the data that would otherwise significantly
+affect the results of linear regression.
+
+
+**Question 3 - A Simulation Study**
+
+```{r}
+lm.error = c()
+Huber.error = c()
+
+n = 150
+set.seed(678461346)
+
+for(i in 1:200){
+  
+  # generate data
+  X <- cbind(1, matrix(rnorm(n * 5), nrow = n))
+  y <- X %*% c(1,1,0.5,0,0,0) + rt(n, 2)
+  
+  # generate testing data
+  X_test <- cbind(1, matrix(rnorm(n * 5), nrow = n))
+  
+  # fit lm and Huber regression
+  lm.fit = lm(y ~ X - 1)
+  Huber.fit = optim(par = c(2,2,2,2,2,2), fn = Huber_f,
+                    method = "BFGS", trainx = X, trainy = y)
+  
+  # get lm testing error
+  lm.pred = predict(lm.fit, as.data.frame(X_test))
+  lm.error[i] = median((y - lm.pred)^2)
+  
+  # get Huber testing error
+  Huber.pred = X %*% Huber.fit$par
+  Huber.error[i] = median((y - Huber.pred)^2)
+}
+
+# mean values of 200 iterations
+mean(lm.error)
+mean(Huber.error)
+
+```
+
+Under various seeds, the mean error of the Huber regression was 
+consistently lower than that of the lm regression. Thus, the Huber
+regression model seems to be better due to its sustained lower
+prediction error.
+
+The median is a better evaluation metric of the models' performance
+because it's more resistant to outliers than the mean. Outliers
+significantly affect mean squared error, whereas median squared error
+is robust to extreme data.
+
+The errors follow a t-distribution, which is heavy-tailed. This means
+that there's a higher chance of observing outliers. The median is
+a better metric because it remains robust to these outliers unlike 
+the mean.
