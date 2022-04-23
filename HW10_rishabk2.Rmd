@@ -1,0 +1,148 @@
+---
+title: "HW10_rishabk2"
+author: "Rishab Kulkarni"
+date: "4/12/2022"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+**Question 1: Fitting and Tuning Trees**
+
+```{r}
+library(rpart)
+library(readr)
+
+df <- read_csv("Downloads/Social_Network_Ads.csv")
+
+y <- df$Purchased
+x2 <- df$Age
+x3 <- df$EstimatedSalary
+
+df$Gender <- ifelse(df$Gender=="Male", 0, 1)
+
+
+x1 <- factor(df$Gender)
+
+m <- rpart(factor(y) ~ x1+x2+x3, df, control = rpart.control(xval=5))
+
+m$cptable
+```
+
+
+```{r}
+# 1sd rule
+cp <- sqrt(m$cptable[3,1]*m$cptable[2,1])
+
+cp
+```
+
+
+```{r}
+prunedtree <- prune(m, cp)
+
+prunedtree
+```
+
+```{r}
+library(rpart.plot)
+
+rpart.plot(prunedtree)
+```
+
+The tree with 3 nodes gives the smallest cross-validation error. 
+
+The first variable being used to split is x2 or `Age`; the splitting rule or 
+criteria is x2 or `Age` < 43.
+
+For a new subject with age 35 and salary 10000, the predicted outcome would be
+1 or purchased. 
+
+**Question 2: Fitting and Tuning Random Forests**
+
+```{r}
+library(tidyverse)
+library(caret)
+library(readr)
+
+d <- read_csv("Downloads/processed_cleveland.csv")
+
+d$num <- ifelse(d$num > 0, 1, 0)
+
+d <- d %>%
+  filter(`ca`!='?' & `thal`!='?')
+
+d$ca <- as.factor(d$ca)
+d$thal <- as.factor(d$thal)
+
+d$num <- as.factor(d$num)
+
+tunegrid <- expand.grid(mtry = c(2,5), splitrule = "gini", min.node.size=c(1,5,10))
+
+tc <- trainControl(method = "cv", number = 10)
+
+randfor <- train(num ~., data = d, method = "ranger", tuneGrid = tunegrid, trControl = tc, num.trees = 300, respect.unordered.factors = "partition")
+
+randfor
+```
+
+The best tuning parameter is mtry = 1 and min node size = 1.
+
+We want to consider the un-ordered factors argument due to the possible presence
+of un-ordered factor covariates in the data. The default value is ignore, where
+all factors are regarded ordered. When we set the value = partition, all potential
+two-partitions may be split.
+
+
+**Question 3: A Simulation Study**
+
+```{r}
+library(MASS)
+library(randomForest)
+
+nsim <- 100
+n.size <- c(1, 5, 10, 20, 30, 40)
+ind <- 1
+avg <- c()
+
+for(ns in n.size) {
+  error <- c()
+  
+  for(i in 1:nsim) {
+    
+    n <- 200
+    X <- mvrnorm(n, c(0, 0), matrix(c(1, 0.5, 0.5, 1), 2, 2))
+    y <- rnorm(n, mean = X[,1] + X[,2])
+    XTest <- mvrnorm(n, c(0, 0), matrix(c(1, 0.5, 0.5, 1), 2, 2))
+    yTest <- rnorm(n, mean = XTest[,1] + XTest[,2])
+    
+    rf <- randomForest(X, as.factor(y), ntree = 300, mtry = 1, nodesize = ns)
+    
+    BayesRule <- ifelse((XTest[, 1] + XTest[, 2] > -0.5) & 
+                     (XTest[, 1] + XTest[, 2] < 0.5), 1, 0)
+    
+    error[i] <- mean((predict(rf, XTest)=="1")==BayesRule)
+  }
+  
+  avg[ind] <- mean(error)
+  ind <- ind + 1
+}
+
+avg
+```
+
+```{r}
+plot(n.size, avg, xlab = "Node Size", ylab = "Pred.error", pch=19)
+```
+
+The mean prediction error rises, drops, rises, and drops again for the final time.
+The mean prediction error fluctuates over the node size values.
+
+Based on the plot, the larger node size values are associated with a lower prediction
+error. I think this happens because random forest models with a higher minimum node
+size have a better classification rate.
+

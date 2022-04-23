@@ -1,0 +1,207 @@
+---
+title: "HW06_rishabk2"
+author: "Rishab Kulkarni"
+date: "2/27/2022"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+**Question 1**
+
+```{r}
+library(glmnet)
+set.seed(123)
+
+load(file = "Downloads/tcga_brca_gene.RData")
+
+s <- floor(0.8 * nrow(gene_exp))
+
+id <- sample(seq_len(nrow(gene_exp)),
+             size = s)
+
+
+g.train <- gene_exp[id, ]
+g.test <- gene_exp[-id, ]
+
+
+x <- data.matrix(g.train[, -605])
+y <- g.train$vital.status
+
+
+las <- cv.glmnet(x, y, nfolds = 10,
+                 family = "binomial")
+
+plot(las)
+```
+
+```{r}
+# best lambda value
+las$lambda.min
+```
+
+```{r}
+coef(las, s = "lambda.min")
+```
+
+7/604 variables were selected based on 
+the lambda.min value. 
+
+The top three variables are 
+rs_APOB, rs_ANO3, and rs_COL10A1.
+
+
+```{r}
+t <- data.matrix(g.train[, -605])
+
+yhat <- predict(las, newx = t,
+               s = "lambda.min",
+               type="response")
+```
+
+```{r}
+table(yhat > 0.5, y)
+```
+
+```{r}
+# training data classification error
+table(yhat > 0.5, y)[1,2] / table(yhat > 0.5, y)[1,1]
+```
+
+No, 0.5 isn't a good cut-off point because 
+~90% of the data is predicted into 0. This
+often happens with unbalanced data.
+
+```{r}
+# unbalanced data
+table(y)
+```
+
+~90% of the observations are labeled into 0,
+which is a sign of unbalanced data.
+
+We need new cut-off values and measurements, 
+such as AUC and the ROC curve to evaluate 
+the model.
+
+**Question 2**
+
+```{r}
+con <- table(yhat > 0.2, y)
+
+# confusion table
+con 
+```
+
+```{r}
+# sensitivity
+con[2,2]/(con[2,2]+con[1,2])
+
+# specificity
+con[1,1]/(con[1,1]+con[2,1])
+```
+
+
+
+```{r}
+# new cut-off value
+# higher sensitivity
+
+con.new <- table(yhat > 0.1, y)
+
+# confusion table, new cut-off
+con.new
+```
+
+```{r}
+# sensitivity
+con.new[2,2]/(con.new[2,2]+con.new[1,2])
+
+# specificity
+con.new[1,1]/(con.new[1,1]+con.new[2,1])
+```
+
+
+```{r}
+library(ROCR)
+
+roc <- prediction(yhat, y)
+
+p <- performance(roc, "tpr", "fpr")
+
+plot(p, colorize = TRUE)
+
+# AUC
+performance(roc, measure = "auc")@y.values[[1]]
+```
+
+
+**Question 3**
+
+```{r}
+g <- seq(0, 1, 0.2)
+
+l.mins <- c()
+cv <- c()
+
+for (i in 1:6) {
+  
+  # fit elastic-net
+  e.net <- cv.glmnet(x, y, nfolds = 10,
+                     alpha = g[i],
+                     family = "binomial")
+  
+  # get lambda.min
+  l.mins[i] <- e.net$lambda.min
+  
+  # get min CV error
+  cv[i] <- min(e.net$cvm)
+  
+}
+l.mins
+cv
+```
+
+```{r}
+# best alpha value
+a.best <- g[which.min(cv)]
+a.best
+```
+
+```{r}
+# best lambda value
+l.best <- l.mins[which.min(cv)]
+l.best
+```
+
+```{r}
+# best model
+e <- cv.glmnet(x, y, nfolds = 10,
+                    alpha = a.best,
+                    family = "binomial")
+
+
+pred <- predict(e, newx = t,
+               s = "lambda.min",
+               type="response")
+
+
+roc <- prediction(pred, y)
+p <- performance(roc, "tpr", "fpr")
+
+plot(p, colorize = TRUE)
+
+
+# AUC
+performance(roc, measure = "auc")@y.values[[1]]
+```
+
+The AUC of the regression with elastic-net
+penalty is normally higher than the AUC
+with lasso penalty; however, due to the
+randomness, the AUC with elastic-net
+penalty may be lower in some cases.

@@ -1,0 +1,169 @@
+---
+title: "HW08_rishabk2"
+author: "Rishab Kulkarni"
+date: "3/24/2022"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+**Problem 1: LDA**
+
+```{r}
+mnist <- read.csv("https://pjreddie.com/media/files/mnist_train.csv",
+                  nrows = 2000)
+
+colnames(mnist) = c("Digit", paste("Pixel",
+                                   seq(1:784), sep = ""))
+save(mnist, file = "mnist_first2000.RData")
+
+train <- data.frame(data.matrix(mnist[1:1000, ]))
+test <- data.frame(data.matrix(mnist[1001:2000, ]))
+```
+
+
+```{r}
+# marginal screening
+
+library(MASS)
+v <- c()
+
+v <- sapply(train[, 2:758], var)
+v.name <- names(sort(v, decreasing = TRUE)[1:50])
+
+train <- train[, c("Digit", v.name)]
+```
+
+```{r}
+# smallest variance
+min(v)
+```
+
+```{r}
+test <- test[, c("Digit", v.name)]
+```
+
+```{r}
+# LDA model
+m.lda <- lda(Digit ~., train)
+m.fitted <- predict(m.lda, test[, -1])
+
+t <- table(m.fitted$class, test$Digit)
+```
+
+```{r}
+# prediction error
+sum(diag(t)) / 1000
+```
+
+**Problem 2: Detailed Calculations in LDA**
+
+```{r}
+# Class 1, Class 2, Class 3 subset
+
+library(tidyverse)
+
+k <- train[train$Digit==c(0,1,6), ]
+
+k.test <- test[test$Digit==c(0,1,6), ]
+
+# Class 1
+c1 <- train %>%
+  filter(`Digit`==0)
+
+# Class 2
+c2 <- train %>%
+  filter(`Digit`==1)
+
+# Class 3
+c3 <- train %>%
+  filter(`Digit`==6)
+```
+
+```{r}
+n <- nrow(c1) + nrow(c2) + nrow(c3)
+
+# prior proportions
+p0 <- nrow(c1) / n
+p1 <- nrow(c2) / n
+p6 <- nrow(c3) / n
+
+# centers
+mu1 <- colMeans(c1[, -1])
+mu2 <- colMeans(c2[, -1])
+mu3 <- colMeans(c3[, -1])
+
+# centered data
+c1_centered <- scale(c1[, -1], center = TRUE, scale = FALSE)
+c2_centered <- scale(c2[, -1], center = TRUE, scale = FALSE)
+c3_centered <- scale(c3[, -1], center = TRUE, scale = FALSE)
+
+# pooled covariance matrix
+sigma <-  ( t(c1_centered) %*% c1_centered + t(c2_centered) %*% c2_centered + t(c3_centered) %*% c3_centered ) / (n - 3)
+```
+
+
+```{r}
+# w_k
+w1 <- solve(sigma) %*% mu1
+w2 <- solve(sigma) %*% mu2
+w3 <- solve(sigma) %*% mu3
+
+# b_k
+b1 <- - 0.5 * t(mu1) %*% solve(sigma) %*% mu1 + log(p0)
+b2 <- - 0.5 * t(mu2) %*% solve(sigma) %*% mu2 + log(p1)
+b3 <- - 0.5 * t(mu3) %*% solve(sigma) %*% mu3 + log(p6)
+
+f1 <- as.matrix(k.test[, -1]) %*% w1 + as.numeric(b1)
+f2 <- as.matrix(k.test[, -1]) %*% w2 + as.numeric(b2)
+f3 <- as.matrix(k.test[, -1]) %*% w3 + as.numeric(b3)
+
+# calculating predicted label
+pred <- c()
+
+for(i in 1:99) {
+  max <- max(f1[i], f2[i], f3[i])
+  if(max == f1[i]) {
+    pred[i] <- 0
+  }
+  else if(max == f2[i]) {
+    pred[i] <- 1
+}
+  else if(max == f3[i]) {
+    pred[i] <- 6
+  }
+}
+
+# classification error
+mean(pred == k.test[, 1])
+```
+
+```{r}
+# lda fitted on 3 digits
+
+d.lda <- lda(Digit ~., k)
+d.fitted <- predict(d.lda, k[, -1])
+
+t2 <- table(d.fitted$class, k.test$Digit)
+```
+
+```{r}
+sum(diag(t2)) / sum(t2)
+```
+
+The classification error was much lower for the LDA model fitted on just the
+three digits.
+
+**Problem 3: QDA**
+
+```{r}
+# d.qda <- qda(Digit ~., train)
+```
+
+The code chunk doesn't work, because the covariance matrix only estimates
+for these k digits. The covariance matrix has no inverse.
+

@@ -1,0 +1,222 @@
+---
+title: "HW07_rishabk2"
+author: "Rishab Kulkarni"
+date: "3/8/2022"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+**Question 1: Fitting KNN**
+
+```{r}
+library(caret)
+library(ElemStatLearn)
+
+
+zip.train <- subset(zip.train,
+             zip.train[, 1]==c(2,7))
+
+# train data
+x <- zip.train[, 2:257]
+y <- zip.train[, 1]
+
+zip.test <- subset(zip.test,
+            zip.test[, 1]==c(2,7))
+
+# test data
+x.test <- zip.test[, 2:257]
+y.test <- zip.test[, 1]
+
+
+control <- trainControl(method = "repeatedcv",number = 5,repeats = 3)
+set.seed(1)
+
+knn.cv <- train(y ~., method = "knn",
+                data = data.frame("x"= x,"y"= as.factor(y)),
+                tuneGrid = data.frame(k = seq(1,10,1)),
+                trControl = control)
+
+plot(knn.cv$results$k, 1-knn.cv$results$Accuracy,
+     xlab = "k", ylab = "Classification Error",
+     type = "b", pch = 19, col = "darkorange")
+
+
+
+```
+
+k = 3 is the optimal tuning, and is associated with
+the lowest classification error.
+
+```{r}
+library(class)
+knn.opt <- knn(x, x.test, y, k=3)
+
+xtab <- table(knn.opt, y.test)
+confusionMatrix(xtab)
+
+mean(knn.opt != y.test)
+```
+
+Testing error was 0.02285714
+
+The cause for this may be that the training
+and testing data have high similarity.
+
+k = 1 may be the best because the closest
+point to the target point shares the same
+class label. 
+
+**Question 2: Intrinsic Low Dimension**
+
+```{r}
+library(FNN)
+set.seed(2)
+
+p=50
+n=100
+
+# setting 1
+X <- matrix(rnorm(n*p), nrow = n, ncol = p)
+
+# setting 2
+X.1 <- rnorm(100,0,1)
+
+
+X.des <- matrix(0,nrow = n, ncol = p)
+X.des[, 1] <- X.1
+
+for(j in 2:p) {
+  
+  X.des[, j] <- X.des[, 1] + rnorm(100,0,0.5)
+}
+
+y <- 2*X.des[, 1] + rnorm(100,0,1)
+
+# test data
+X.test <- matrix(rnorm(200*p), nrow = 200,
+                 ncol = p)
+```
+
+
+```{r}
+knn.1 <- knn(X, X.test, y, k=5)
+
+knn.2 <- knn(X.des, X.test, y, k=5)
+
+mean(knn.1 != y)
+mean(knn.2 != y)
+```
+
+The KNN regression using the Setting 2 generated data
+had a larger prediction error.
+
+```{r}
+nsim=50
+
+s1.error <- rep(0,nsim)
+s2.error <- rep(0,nsim)
+
+for(i in 1:nsim) {
+  
+  # generate S1 data
+  X.s1 <- matrix(rnorm(n*p), nrow = n,
+                 ncol = p)
+  
+  # generate S2 data
+  X.1 <- rnorm(100,0,1)
+  X.s2 <- matrix(0,nrow = n, ncol = p)
+  X.s2[, 1] <- X.1
+  
+  for(j in 2:p) {
+    X.s2[, j] <- X.s2[, 1] + rnorm(100,0,0.5)
+  }
+  
+  y2 <- 2*X.s2[, 1] + rnorm(100,0,1)
+  
+  knn.s1 <- knn(X.s1, X.test, y2, k=5)
+  knn.s2 <- knn(X.s2, X.test, y2, k=5)
+  
+  s1.error[i] <- mean(knn.s1 != y2)
+  s2.error[i] <- mean(knn.s2 != y2)
+}
+
+boxplot(s1.error,s2.error)
+```
+
+For the first j variables, I suspect that the mean
+prediction error for each setting will decrease.
+
+According to lecture notes, KNN doesn't perform well
+with high-dimensional data, because there's not
+enough training data close to the target point.
+
+The lecture notes also show that for larger p, the 
+nearest k observations are further from the target
+point than with a smaller p. So, models with fewer
+variables must have lower prediction errors.
+
+As p increases, I suspect Setting 2's prediction
+errors will increase more dramatically than those
+of Setting 1.
+
+```{r}
+library(FNN)
+
+n=100
+
+m.error <- rep(0, nsim)
+m2.error <- rep(0,nsim)
+sim.error <- rep(0, nsim)
+sim2.error <- rep(0,nsim)
+
+for(i in 1:nsim) {
+  
+  for(p in 1:50) {
+    
+    X = matrix(rnorm(n*p), nrow=100, ncol=p)
+    X.1 <- rnorm(100, 0, 1)
+    X2 <- matrix(0, nrow = n, ncol = p)
+    
+    X2[, 1] <- X.1
+    
+    if(p!=1) {
+      
+      for(c in 2:p) {
+        X2[, c] <- X.1 + rnorm(100,0,1)
+      }
+    }
+    y <- 2*X.1 + rnorm(100,0,1)
+    x0 <- matrix(rep(0,p), nrow=1, ncol=p)
+    
+    knn.fit1 <- knn.reg(X, x0, y, k=5, algorithm = "brute")
+    knn.fit2 <- knn.reg(X2, x0, y, k=5, algorithm = "brute")
+    
+    m.error[p] <- (knn.fit1$pred - 0)^2
+    m2.error[p] <- (knn.fit2$pred - 0)^2
+    
+  }
+  sim.error[i] <- mean(m.error)
+  sim2.error[i] <- mean(m2.error)
+}
+
+# storing mean prediction error for each value of j
+# j refers to number of variables being used
+
+```
+
+```{r}
+j <- 1:50
+
+
+plot(j, sim.error, xlab = "j", ylab = "Setting 1 error")
+plot(j, sim2.error, xlab = "j", ylab = "Setting 2 error")
+```
+
+The plots above didn't match my expectations. Based on the plots,
+the Setting 2 errors were mostly lower than Setting 1 errors
+across increasing values of j.

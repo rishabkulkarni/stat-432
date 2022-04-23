@@ -1,0 +1,170 @@
+---
+title: "HW09-432"
+author: "Rishab Kulkarni"
+date: "4/7/2022"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# to hide warning messages
+options(warn = -1)
+```
+
+**Q1: Linear SVM and Support Vectors**
+
+```{r}
+library(readr)
+df <- read.csv("Downloads/Social_Network_Ads.csv")
+
+# scaling & centering variables
+df$EstimatedSalary <- scale(df$EstimatedSalary,
+                            scale = TRUE,
+                            center = TRUE)
+
+df$Age <- scale(df$Age,
+                scale = TRUE,
+                center = TRUE)
+library(e1071)
+
+# {-1, 1} outcome
+y <- ifelse(df$Purchased==0, -1, 1)
+
+df$Purchased <- y
+
+
+s <- floor(0.8 * nrow(df))
+id <- sample(seq_len(nrow(df)),
+             size = s)
+
+train <- df[id, ]
+test <- df[-id, ]
+
+x1 <- train$EstimatedSalary
+x2 <- train$Age
+```
+
+
+```{r}
+# 2D scatter plot
+plot(x1, x2, col = ifelse(y>0, "blue", "red"), pch=19)
+```
+
+```{r}
+# linear SVM
+svm <- svm(Purchased ~ EstimatedSalary + Age, train,
+           type = "C-classification", kernel = "linear", scale = FALSE, cost = 1)
+
+yhat <- as.numeric(predict(svm, train[,c(3,4)]))
+
+yhat <- ifelse(yhat==1, -1, 1)
+
+# confusion table
+ct <- table(train$Purchased, yhat)
+ct
+
+# in-sample classification error
+sum(diag(ct)) / sum(ct)
+```
+
+
+```{r}
+b <- t(svm$coefs) %*% svm$SV
+b0 <- -svm$rho
+
+# decision line
+plot(x1, x2, col = ifelse(y>0, "blue", "red"), pch=19)
+abline(a=-b0/b[1,2], b=-b[1,1]/b[1,2], col="black", lty=1, lwd = 2)
+
+# support vectors
+abline(a= (-b0-1)/b[1,2], b=-b[1,1]/b[1,2], col="black", lty=3, lwd = 2)
+abline(a= (-b0+1)/b[1,2], b=-b[1,1]/b[1,2], col="black", lty=3, lwd = 2)
+
+points(x1[svm$index, ], col="black", cex=3)
+points(x2[svm$index, ], col="black", cex=3)
+```
+
+**Q2: SVM for Hand-Written Digit Data**
+
+```{r}
+library(ElemStatLearn)
+
+z <- data.frame(zip.train)
+
+z.test <- data.frame(zip.test)
+
+# digits 4 and 9
+library(tidyverse)
+
+z <- z %>%
+  filter(`X1`==4 | `X1`==9)
+
+z.test <- z.test %>%
+  filter(`X1`==4 | `X1`==9)
+
+library(caret)
+library(kernlab)
+
+c.grid <- expand.grid(cost = seq(0.01, 2, length = 20))
+tc <- trainControl(method = "cv", number = 10)
+
+svm2 <- train(factor(X1) ~., z, method = "svmLinear2", trControl = tc, tuneGrid = c.grid)
+
+svm2
+```
+
+Based on the accuracy, the optimal C = 0.01.
+
+```{r}
+# linear SVM using c = 0.01
+svm.c <- svm(X1 ~., z, type = "C-classification", kernel = "linear", scale = FALSE, cost = 0.01)
+
+pred <- as.numeric(predict(svm.c, z.test[,-1]))
+
+pred <- ifelse(pred==2, 9, 4)
+
+# confusion table
+cm <- table(z.test$X1, pred)
+cm
+```
+
+
+```{r}
+# testing error
+sum(diag(cm)) / sum(cm)
+```
+
+
+```{r}
+svm.radial <- train(factor(X1) ~ ., data = z, method = "svmRadial",
+                preProcess = c("center", "scale"),
+                tuneGrid = expand.grid(C = c(0.01, 0.1, 0.5, 1), sigma = c(1, 2, 3)),
+                trControl = trainControl(method = "repeatedcv", number = 10, repeats = 3))
+
+svm.radial
+```
+
+The optimal C = 0.01 and the optimal sigma = 3.
+
+```{r}
+# radial kernel SVM
+svm3 <- svm(factor(X1) ~., z, scale = FALSE, kernel = "radial", cost = 0.01)
+svm3
+
+yh <- as.numeric(predict(svm3, z.test[,-1]))
+
+yh <- ifelse(yh==2, 9, 4)
+
+# confusion table
+cf <- table(z.test$X1, yh)
+cf
+```
+
+```{r}
+# testing error
+sum(diag(cf)) / sum(cf)
+```
+
