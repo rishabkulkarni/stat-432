@@ -1,0 +1,404 @@
+---
+title: "HW05_rishabk2"
+author: "Rishab Kulkarni"
+date: "2/20/2022"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+**Question 1: Data Preparation**
+
+```{r}
+library(readr)
+
+sep <- read.csv("Downloads/sepsis.csv", row.names = 1)
+
+
+
+sum(is.na(sep))
+
+colSums(is.na(sep))
+```
+
+53 observations have missing values.
+
+BLGCS has 3 missing values and BLLBILI has 50. 
+No other variables have missing values.
+
+
+```{r}
+set.seed(678461346)
+
+# performing imputation
+library(mice)
+
+# mean imputation
+imp.m <- mice(sep[, -1], method = "mean",
+                 m = 1, maxit = 1)
+
+# stochastic reg.imputation
+imp.s <- mice(sep[, -1], method = "norm.nob",
+                  m = 1, maxit = 1)
+
+
+# get imputed data
+sep.m <- complete(imp.m)
+sep.s <- complete(imp.s)
+
+# storing outcome
+y = sep$Health
+
+
+sep.m <- cbind(y, sep.m)
+sep.s <- cbind(y, sep.s)
+
+
+s <- floor(0.8 * nrow(sep))
+
+id <- sample(seq_len(nrow(sep)),
+             size= s)
+
+# linear models for each imputed data
+lm.m <- lm(y ~., sep.m[id, ])
+lm.s <- lm(y ~., sep.s[id, ])
+
+
+library(Metrics)
+
+# MSE of both models
+
+yhat.m <- predict(lm.m, sep.m[-id, ][, 2:13])
+mse(sep.m[-id, ]$y, yhat.m)
+
+
+yhat.s <- predict(lm.s, sep.s[-id, ][, 2:13])
+mse(sep.s[-id, ]$y, yhat.s)
+```
+
+Under this seed, the MSE of the imputation by mean model
+was lower than the MSE of the stochastic reg. imputation
+model. This means the imputation by mean model is a
+better fit than the stochastic reg. imputation model.
+
+
+```{r}
+# univariate distributions
+# using stochastic reg.imputed data
+
+par(mfrow = c(3, 4))
+
+for(i in 2:ncol(sep)) {
+  hist(sep.s[, i], breaks = 10, main = colnames(sep.s)[i])
+}
+
+```
+
+
+```{r}
+# histograms of transformations
+# reasoning and summary after code
+
+library(entropy)
+
+par(mfrow = c(3, 3))
+
+hist(log(sep.s$PRAPACHE))
+
+hist(discretize(sep.s$AGE, numBins=2))
+
+hist(log(sep.s$BLGCS))
+
+hist(discretize(sep.s$BLIL6, numBins=2))
+
+hist(log(1+sep.s$BLLPLAT))
+
+hist(qnorm(rank(sep.s$BLLBILI)/(1+nrow(sep.s))), 
+       main = "Gaussian Quantile")
+
+hist(qnorm(rank(sep.s$BLLCREAT)/(1+nrow(sep.s))), 
+       main = "Gaussian Quantile")
+
+hist(discretize(sep.s$BLADL, numBins=2))
+
+hist(log(sep.s$blSOFA))
+
+```
+
+**Summary**
+
+*PRAPACHE* has a right-tailed distribution
+and doesn't contain 0, so I did a $log(x)$
+transformation. Upon the transformation,
+the skewness was alleviated, yet not
+eradicated. *PRAPACHE* approached a 
+normal distribution with the $log(x)$
+transformation, which will be better
+for models.
+
+*AGE* has a uniform-like distribution,
+with a much higher frequency for some
+ages. I applied discretization to the *AGE*
+variable into two bins, separating the 
+ages into below and above a certain age. 
+
+*BLGCS* has a heavy left-tailed distribution,
+and doesn't contain 0, so I did a $log(x)$
+transformation. The transformation didn't
+help the skewness much, but the skewness
+was reduced. At first, I had done a quantile
+transformation further transformed into
+Gaussian quantiles, but there was far too
+much skewness in this dist compared to the
+$log(x)$ transformation.
+
+*BLIL6* has a bimodal distribution, so I
+did a discretization transformation with
+two bins. The result was separation of data
+below and above a specific daily living 
+score.
+
+*BLLPLAT* has a near-normal distribution
+with outliers that may harm the models.
+The dist contained 0, so I did a $log(x)$
+transformation to de-emphasize outliers
+and approach normality. The result was
+a more normal distribution with less
+emphasis on the outliers.
+
+*BLLBILI* has a heavy-tailed distribution
+on both sides, so I did a quantile
+transformation further transformed into
+Gaussian quantiles. The transformations
+resulted in a normal distribution, which
+would be good for models.
+
+*BLLCREAT* has a right-tailed distribution,
+with much skewness and contains 0. First,
+I did a $log(1+x)$ transformation, but it
+had just as much skewness. Next, I did a
+quantile transformation further transformed
+into Gaussian quantiles, which revealed
+much less skewness.
+
+*BLADL* has a heavy-tailed distribution,
+and can be interpreted as bimodal as well.
+First, I did a $log(1+x)$ transformation
+since it contains 0. The result was much
+skewness, with most of the distribution
+pushed to the left. Next, I did a quantile
+transformation further transformed into
+Gaussian quantiles, which again revealed
+ample skewness. Last, I did a discretization
+transformation as *BLADL* could be 
+classified as bimodal. The result was
+a separation of daily living scores
+above and below a specific score.
+
+*blSOFA* has a near-normal distribution,
+but contains outliers that may be harmful
+to the model. I did a $log(x)$ transformation
+to de-emphasize the outliers, resulting
+in a more normal distribution with less
+influential outliers.
+
+*THERAPY* is categorical, with values
+0 and 1. Thus, no transformation is
+required for this variable.
+
+*ORGANNUM* has a near normal distribution,
+so no further transformation is required
+for this variable.
+
+*TIMFIRST* is categorical, with values
+0 and ~4000. Thus, no transformation is
+required for this variable.
+
+
+```{r}
+# transforming stochastic reg.imputed data
+# with transformations described above
+
+sep.s$PRAPACHE <- log(sep.s$PRAPACHE)
+
+sep.s$AGE <- discretize(sep.s$AGE, numBins = 2)
+
+sep.s$BLGCS <- log(sep.s$BLGCS)
+
+sep.s$BLIL6 <- discretize(sep.s$BLIL6, numBins=2)
+
+sep.s$BLLPLAT <- log(1+sep.s$BLLPLAT)
+
+sep.s$BLLBILI <- qnorm(rank(sep.s$BLLBILI)/(1+nrow(sep.s)))
+
+sep.s$BLLCREAT <- qnorm(rank(sep.s$BLLCREAT)/(1+nrow(sep.s)))
+
+sep.s$BLADL <- discretize(sep.s$BLADL, numBins = 2)
+
+sep.s$blSOFA <- log(sep.s$blSOFA)
+
+```
+
+**Question 2: Lasso and Elastic-Net**
+
+```{r}
+# stochastic reg.imputed data
+# transformations applied
+
+# lasso model
+
+library(glmnet)
+
+library(Metrics)
+
+s <- floor(0.8 * nrow(sep.s))
+
+id <- sample(seq_len(nrow(sep.s)), size = s)
+
+
+sep.s_train <- sep.s[id, ]
+sep.s_test <- sep.s[-id, ]
+
+lasso <- cv.glmnet(data.matrix(sep.s_train[, 2:13]),
+                      sep.s_train$y, nfolds = 10, alpha = 1)
+
+# lambda v. GCV error figure
+plot(lasso)
+
+# best lambda value
+lambda <- lasso$lambda[which.min(lasso$cvm)]
+lambda
+
+# parameter estimates
+coef(lasso, s = lambda)
+
+yhat <- predict(lasso, newx = data.matrix(sep.s_test[, 2:13]),
+            s=lambda)
+
+mse(sep.s_test$y, yhat)
+```
+
+I used 10 folds in the lasso cross-validation. 
+To choose the best tuning parameter $\lambda$,
+I showed how the CV error changed with $\lambda$ 
+values in the plot above. Then, I found the $\lambda$ 
+value that minimized the CV error, which is also 
+lambda.min. 
+
+The best tuning parameter $\lambda$ was 0.143802,
+and is shown above in the output.
+
+The parameter estimates for this $\lambda$ value are
+shown in the 13x1 sparse matrix above.
+
+The parameter estimates for the minimum CV error are shown 
+in the 13x1 sparse matrix above. In the sparse matrix, the
+parameters without estimates were shrunk to zero and 
+excluded from the model. 
+
+The parameters with estimates are the nonzero terms selected 
+by the model. The solution is quite sparse, as only a few 
+parameters were included in the model.
+
+The mean CV error for this $\lambda$ value was 3.79574
+
+
+```{r}
+# elastic-net model
+
+# alpha grid of values
+a.vals <- seq(0, 1, by= 0.1)
+
+
+enet <- lapply(a.vals, function(a){
+  cv.glmnet(data.matrix(sep.s_train[, 2:13]),
+            sep.s_train$y, alpha = a)
+})
+
+# to store corresponding CV errors
+a.error <- c()
+
+for (i in 1:11) {
+  a.error[i] <- min(enet[[i]]$cvm)
+}
+
+# best alpha value
+a.opt <- a.vals[which.min(a.error)]
+a.opt
+
+enet.a <- cv.glmnet(data.matrix(sep.s_train[, 2:13]),
+                    sep.s_train$y, alpha = a.opt)
+
+# parameter estimates
+coef(enet.a, s = "lambda.min")
+
+yhat.e <- predict(enet.a,
+          newx = data.matrix(sep.s_test[, 2:13]),
+          s=lambda)
+
+mse(sep.s_test$y, yhat.e)
+ 
+```
+
+I created a vector of alpha values [0, 1] by increments of 0.1. 
+For each alpha value, I fit an elastic-net model. Then, I stored 
+the CV error for each model in the a.error vector. Last, I found 
+the index of the minimum CV error in a.error, which would be the 
+index of the best alpha value in the alpha values grid.
+
+The best tuning parameter $\alpha$ is shown in the output above.
+The best $\alpha$ changes for every code run.
+
+The parameter estimates for the minimum CV error are shown 
+in the 13x1 sparse matrix above. In the sparse matrix, the
+parameters without estimates were shrunk to zero and excluded
+from the model. 
+
+The parameters with estimates are the nonzero terms selected 
+by the model. The solution is quite sparse, as only a few 
+parameters were included in the model.
+
+The elastic-net model is a better fit than the lasso model due to 
+its lower MSE. The elastic-net model's MSE was 3.774684, whereas 
+the lasso model's MSE was 3.79574. 
+
+
+**Ridge**
+
+The main advantage with ridge regression is that it addresses
+multicollinearity, or highly correlated variables. When we add an L2 
+norm or ridge penalty to the objective function, the regression 
+solution becomes more stable. The disadvantage with ridge regression
+is the bias-variance trade-off: as we add a larger L2 norm penalty,
+the param. estimate's variance decreases but we introduce more bias
+to the estimates. Thus, we must choose a lambda value that achieves
+a good balance of the bias-variance trade-off.
+
+**Lasso**
+
+The advantage of lasso regression is that small $\hat{\beta_j}$ 
+estimates are shrunk to zero. When we add the L1 norm penalty, small
+coefficient est. are shrunk to zero and excluded from the model. 
+Lasso models can help when dealing with many variables, where we
+can't model the effects of all variables. The disadvantage of the
+lasso model is that it suffers when two variables are highly 
+correlated. In this case, lasso will select one variable and shrink
+the other one to zero. This can be an issue when we need both 
+variables to predict the response.
+
+**Elastic-Net**
+
+The advantage with elastic-net models is that they enjoy benefits
+from both ridge and lasso regression. Elastic-net models can be
+used when dealing with multicollinearity or when the number of
+parameters exceeds the number of observations. A specific advantage
+of elastic-net models is that it can select two highly correlated
+variables to predict response. The disadvantage with elastic-net
+models is that instead of one parameter, it has two: $\lambda$ and
+$\alpha$. The computational cost of finding both parameters that
+minimize CV error is too high. With two parameters, there is also
+risk of overfitting.
